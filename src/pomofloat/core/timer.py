@@ -26,10 +26,8 @@ class TimerEngine:
         return self.cycle.phases[self.current_phase_index]
 
     def start(self) -> None:
-        if self.state == TimerState.FINISHED:
-            return
-
-        self.state = TimerState.RUNNING
+        if self.state == TimerState.IDLE:
+            self.state = TimerState.RUNNING
 
     def pause(self) -> None:
         if self.state == TimerState.RUNNING:
@@ -46,10 +44,20 @@ class TimerEngine:
         self.remaining_seconds = self.current_phase.duration_seconds
 
     def skip(self) -> None:
+        if self.state in (
+            TimerState.IDLE,
+            TimerState.FINISHED,
+        ):
+            return
+
+        previous_state = self.state
+
+        self._advance_phase()
+
         if self.state == TimerState.FINISHED:
             return
 
-        self._advance_phase()
+        self.state = previous_state
 
     def continue_from_waiting(self) -> None:
         if self.state != TimerState.WAITING:

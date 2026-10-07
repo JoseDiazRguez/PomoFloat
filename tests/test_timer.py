@@ -174,3 +174,57 @@ def test_infinite_cycle_never_finishes() -> None:
 
     assert engine.state == TimerState.RUNNING
     assert engine.current_repetition == 51
+
+
+def test_start_only_works_from_idle() -> None:
+    engine = TimerEngine(create_test_cycle())
+
+    engine.start()
+    engine.pause()
+    engine.start()
+
+    assert engine.state == TimerState.PAUSED
+
+
+def test_skip_does_nothing_when_idle() -> None:
+    engine = TimerEngine(create_test_cycle())
+
+    engine.skip()
+
+    assert engine.current_phase.name == "Trabajo"
+    assert engine.current_phase_index == 0
+    assert engine.state == TimerState.IDLE
+
+
+def test_skip_preserves_paused_state() -> None:
+    engine = TimerEngine(create_test_cycle())
+
+    engine.start()
+    engine.pause()
+    engine.skip()
+
+    assert engine.current_phase.name == "Descanso"
+    assert engine.state == TimerState.PAUSED
+
+
+def test_skip_preserves_waiting_state() -> None:
+    cycle = Cycle(
+        name="Manual",
+        phases=[
+            Phase("Trabajo", 1, auto_start_next=False),
+            Phase("Descanso", 2),
+            Phase("Trabajo 2", 3),
+        ],
+    )
+
+    engine = TimerEngine(cycle)
+
+    engine.start()
+    engine.tick()
+
+    assert engine.state == TimerState.WAITING
+
+    engine.skip()
+
+    assert engine.current_phase.name == "Trabajo 2"
+    assert engine.state == TimerState.WAITING
