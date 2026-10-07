@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pomofloat"
+version = "0.1.0"
+description = "Temporizador Pomodoro flotante, flexible y multiplataforma."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+
+authors = [
+    { name = "José Díaz Rodríguez" }
+]
+
+dependencies = []
+
+[project.scripts]
+pomofloat = "pomofloat.main:main"   # Nos permitir ejecutarlo solo con pomofloat
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
