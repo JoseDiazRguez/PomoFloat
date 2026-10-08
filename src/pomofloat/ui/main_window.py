@@ -550,12 +550,12 @@ class MainWindow(QWidget):
         self.main_layout.addWidget(self.compact_view)
 
     def _restore_window_state(self) -> None:
-        position = self.settings.value(
-            "window/position"
+        geometry = self.settings.value(
+            "window/geometry"
         )
 
-        if position is not None:
-            self.move(position)
+        if geometry is not None:
+            self.restoreGeometry(geometry)
 
         normal_size = self.settings.value(
             "window/normal_size"
@@ -575,8 +575,8 @@ class MainWindow(QWidget):
 
     def closeEvent(self, event: QCloseEvent) -> None:
         self.settings.setValue(
-            "window/position",
-            self.pos(),
+            "window/geometry",
+            self.saveGeometry(),
         )
 
         self.settings.setValue(
