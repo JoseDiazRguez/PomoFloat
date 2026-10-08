@@ -1,5 +1,5 @@
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QMouseEvent
+from PySide6.QtCore import QSettings, Qt, QTimer
+from PySide6.QtGui import QCloseEvent, QMouseEvent
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -61,6 +61,8 @@ class MainWindow(QWidget):
     def __init__(self) -> None:
         super().__init__()
 
+        self.settings = QSettings("PomoFloat", "PomoFloat")
+
         self.compact_mode = False
 
         self.engine = TimerEngine(
@@ -81,6 +83,7 @@ class MainWindow(QWidget):
         self._configure_window()
         self._create_ui()
         self._update_ui()
+        self._restore_window_state()
 
     def _configure_window(self) -> None:
         self.setWindowTitle("PomoFloat")
@@ -368,6 +371,12 @@ class MainWindow(QWidget):
         self._update_ui()
 
     def _toggle_compact_mode(self) -> None:
+        if not self.compact_mode:
+            self.settings.setValue(
+                "window/normal_size",
+                self.size(),
+            )
+
         self.compact_mode = not self.compact_mode
 
         if self.compact_mode:
@@ -384,7 +393,15 @@ class MainWindow(QWidget):
 
             self.setMaximumHeight(16777215)
             self.setMinimumSize(300, 150)
-            self.resize(*self.NORMAL_SIZE)
+
+            normal_size = self.settings.value(
+                "window/normal_size"
+            )
+
+            if normal_size is not None:
+                self.resize(normal_size)
+            else:
+                self.resize(*self.NORMAL_SIZE)
 
         self._update_ui()
 
@@ -531,3 +548,48 @@ class MainWindow(QWidget):
         self.compact_view.hide()
 
         self.main_layout.addWidget(self.compact_view)
+
+    def _restore_window_state(self) -> None:
+        geometry = self.settings.value(
+            "window/geometry"
+        )
+
+        if geometry is not None:
+            self.restoreGeometry(geometry)
+
+        normal_size = self.settings.value(
+            "window/normal_size"
+        )
+
+        compact_mode = self.settings.value(
+            "window/compact_mode",
+            False,
+            type=bool,
+        )
+
+        if normal_size is not None:
+            self.resize(normal_size)
+
+        if compact_mode:
+            self._toggle_compact_mode()
+
+    def closeEvent(self, event: QCloseEvent) -> None:
+        self.settings.setValue(
+            "window/geometry",
+            self.saveGeometry(),
+        )
+
+        self.settings.setValue(
+            "window/compact_mode",
+            self.compact_mode,
+        )
+
+        if not self.compact_mode:
+            self.settings.setValue(
+                "window/normal_size",
+                self.size(),
+            )
+
+        self.settings.sync()
+
+        super().closeEvent(event)
