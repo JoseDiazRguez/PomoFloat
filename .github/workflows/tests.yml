@@ -3,12 +3,12 @@ name: Tests
 # Se ejecutan los test cuando se haga un push o haya un Pull Request sobre main o develop
 on:
   push:
-    branch:
+    branches:
       - main
       - develop
 
   pull_request:
-    branch:
+    branches:
       - main
       - develop
 
