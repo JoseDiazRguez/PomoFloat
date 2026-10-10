@@ -9,11 +9,18 @@ from PySide6.QtWidgets import (
     QSizeGrip,
     QVBoxLayout,
     QWidget,
+    QApplication,
+    # QComboBox,
+    QMessageBox,
 )
 
 from pomofloat.core.cycle import Cycle
 from pomofloat.core.phase import Phase
 from pomofloat.core.timer import TimerEngine, TimerState
+from pomofloat.ui.cycle_editor import CycleEditor
+from pomofloat.services.cycle_storage import (
+    CycleStorage,
+)
 
 
 class DraggableFrame(QFrame):
@@ -35,6 +42,7 @@ class ResizeHandle(QFrame):
 
         self.setFixedSize(18, 18)
         self.setCursor(Qt.CursorShape.SizeFDiagCursor)
+        self.preset_panel_previous_height: int | None = None
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
         if event.button() == Qt.MouseButton.LeftButton:
@@ -65,15 +73,62 @@ class MainWindow(QWidget):
 
         self.compact_mode = False
 
-        self.engine = TimerEngine(
-            Cycle(
-                name="Pomodoro clásico",
-                phases=[
-                    Phase("Concentración", 25 * 60),
-                    Phase("Descanso", 5 * 60),
-                ],
-                repetitions=None,
+        self.cycle_storage = CycleStorage()
+
+        self.presets, active_preset_name = (
+            self.cycle_storage.load_presets()
+        )
+
+        default_cycle = Cycle(
+            name="Pomodoro clásico",
+            phases=[
+                Phase(
+                    "Concentración",
+                    25 * 60,
+                ),
+                Phase(
+                    "Descanso",
+                    5 * 60,
+                ),
+            ],
+            repetitions=None,
+        )
+
+        if not self.presets:
+            self.presets = [
+                default_cycle
+            ]
+
+            self.active_preset_name = (
+                default_cycle.name
             )
+
+            self.cycle_storage.save_presets(
+                self.presets,
+                self.active_preset_name,
+            )
+
+        else:
+            self.active_preset_name = (
+                active_preset_name
+            )
+
+        active_cycle = next(
+            (
+                cycle
+                for cycle in self.presets
+                if cycle.name
+                == self.active_preset_name
+            ),
+            self.presets[0],
+        )
+
+        self.active_preset_name = (
+            active_cycle.name
+        )
+
+        self.engine = TimerEngine(
+            active_cycle
         )
 
         self.timer = QTimer(self)
@@ -82,6 +137,7 @@ class MainWindow(QWidget):
 
         self._configure_window()
         self._create_ui()
+        self._refresh_preset_selector()
         self._update_ui()
         self._restore_window_state()
 
@@ -104,8 +160,34 @@ class MainWindow(QWidget):
 
         self._create_normal_view()
         self._create_compact_view()
+        self._create_cycle_editor_view()
 
         self._apply_styles()
+
+    def _create_cycle_editor_view(self) -> None:
+        self.cycle_editor = CycleEditor(
+            self.engine.cycle,
+            self.presets,
+            self,
+        )
+
+        self.cycle_editor.saved.connect(
+            self._save_cycle_configuration
+        )
+
+        self.cycle_editor.cancelled.connect(
+            self._close_cycle_editor
+        )
+
+        self.cycle_editor.delete_requested.connect(
+            self._delete_preset
+        )
+
+        self.cycle_editor.hide()
+
+        self.main_layout.addWidget(
+            self.cycle_editor
+        )
 
     def _create_normal_view(self) -> None:
         self.normal_view = QWidget()
@@ -118,6 +200,7 @@ class MainWindow(QWidget):
         self.main_layout = self.normal_layout
 
         self._create_header()
+        self._create_preset_panel()
         self._create_timer_area()
         self._create_controls()
         self._create_resize_area()
@@ -138,30 +221,157 @@ class MainWindow(QWidget):
         self.phase_label = QLabel()
         self.phase_label.setObjectName("phaseLabel")
 
+        self.preset_button = QPushButton()
+
+        self.preset_button.setObjectName(
+            "presetButton"
+        )
+
+        self.preset_button.setToolTip(
+            "Seleccionar ciclo"
+        )
+
+        self.preset_button.clicked.connect(
+            self._toggle_preset_panel
+        )
+
         self.repetition_label = QLabel()
         self.repetition_label.setObjectName("secondaryLabel")
 
-        header_layout.addWidget(self.phase_indicator)
-        header_layout.addWidget(self.phase_label)
+        header_layout.addWidget(
+            self.phase_indicator
+        )
+
+        header_layout.addWidget(
+            self.preset_button
+        )
 
         header_layout.addStretch()
 
         header_layout.addWidget(self.repetition_label)
 
+        self.settings_button = QPushButton("⚙")
+        self.settings_button.setObjectName(
+            "windowButton"
+        )
+        self.settings_button.setToolTip(
+            "Configurar ciclo"
+        )
+        self.settings_button.clicked.connect(
+            self._open_cycle_editor
+        )
+
         self.compact_button = QPushButton("▭")
         self.compact_button.setObjectName("windowButton")
         self.compact_button.setToolTip("Cambiar modo compacto")
-        self.compact_button.clicked.connect(self._toggle_compact_mode)
+        self.compact_button.clicked.connect(
+            self._toggle_compact_mode
+        )
 
         self.close_button = QPushButton("×")
         self.close_button.setObjectName("closeButton")
         self.close_button.setToolTip("Cerrar PomoFloat")
         self.close_button.clicked.connect(self.close)
 
+        header_layout.addWidget(self.settings_button)
         header_layout.addWidget(self.compact_button)
         header_layout.addWidget(self.close_button)
 
         self.main_layout.addWidget(self.header)
+
+    def _refresh_preset_selector(self) -> None:
+        self.preset_button.setText(
+            f"{self.active_preset_name} ▾"
+        )
+
+        while (
+            self.preset_panel_layout.count()
+            > 0
+        ):
+            item = (
+                self.preset_panel_layout
+                .takeAt(0)
+            )
+
+            widget = item.widget()
+
+            if widget is not None:
+                widget.deleteLater()
+
+        for preset in self.presets:
+            button = QPushButton()
+
+            if (
+                preset.name
+                == self.active_preset_name
+            ):
+                button.setText(
+                    f"✓  {preset.name}"
+                )
+            else:
+                button.setText(
+                    f"   {preset.name}"
+                )
+
+            button.setObjectName(
+                "presetItemButton"
+            )
+
+            button.setFixedHeight(32)
+
+            button.clicked.connect(
+                lambda checked=False,
+                name=preset.name:
+                self._select_preset(name)
+            )
+
+            self.preset_panel_layout.addWidget(
+                button
+            )
+
+        row_height = 32
+        spacing = 2
+        margins = 12
+
+        preset_count = len(self.presets)
+
+        panel_height = (
+            preset_count * row_height
+            + max(0, preset_count - 1) * spacing
+            + margins
+        )
+
+        self.preset_panel.setFixedHeight(
+            panel_height
+        )
+
+    def _change_preset(
+        self,
+        preset_name: str,
+    ) -> None:
+        if not preset_name:
+            return
+
+        cycle = next(
+            (
+                preset
+                for preset in self.presets
+                if preset.name == preset_name
+            ),
+            None,
+        )
+
+        if cycle is None:
+            return
+
+        self.active_preset_name = cycle.name
+
+        self.cycle_storage.save_presets(
+            self.presets,
+            self.active_preset_name,
+        )
+
+        self._apply_cycle(cycle)
 
     def _create_timer_area(self) -> None:
         self.timer_container = QWidget()
@@ -323,6 +533,39 @@ class MainWindow(QWidget):
             #compactButton:hover {
                 background-color: #303134;
             }
+
+            #presetButton {
+                background-color: #303134;
+                border: 1px solid #5f6368;
+                border-radius: 4px;
+                padding: 3px 8px;
+                font-size: 11px;
+                min-height: 20px;
+            }
+
+            #presetButton:hover {
+                background-color: #3c4043;
+            }
+
+            #presetPanel {
+                background-color: #292a2d;
+                border: 1px solid #5f6368;
+                border-radius: 6px;
+            }
+
+            #presetItemButton {
+                background: transparent;
+                border: none;
+                border-radius: 4px;
+                text-align: left;
+                padding-left: 10px;
+                padding-right: 10px;
+                font-size: 12px;
+            }
+
+            #presetItemButton:hover {
+                background-color: #3c4043;
+            }
             """
         )
 
@@ -371,6 +614,8 @@ class MainWindow(QWidget):
         self._update_ui()
 
     def _toggle_compact_mode(self) -> None:
+        self._close_preset_panel()
+
         if not self.compact_mode:
             self.settings.setValue(
                 "window/normal_size",
@@ -530,6 +775,16 @@ class MainWindow(QWidget):
             self._toggle_compact_mode
         )
 
+        self.compact_settings_button = QPushButton("⚙")
+        self.compact_settings_button.setObjectName(
+            "windowButton"
+        )
+        self.compact_settings_button.setToolTip(
+            "Configurar ciclo"
+        )
+        self.compact_settings_button.clicked.connect(
+            self._open_cycle_editor
+        )
         self.compact_close_button = QPushButton("×")
         self.compact_close_button.setObjectName("closeButton")
         self.compact_close_button.clicked.connect(self.close)
@@ -542,6 +797,7 @@ class MainWindow(QWidget):
         layout.addWidget(self.compact_time_label)
         layout.addWidget(self.compact_repetition_label)
         layout.addWidget(self.compact_start_button)
+        layout.addWidget(self.compact_settings_button)
         layout.addWidget(self.expand_button)
         layout.addWidget(self.compact_close_button)
 
@@ -592,4 +848,269 @@ class MainWindow(QWidget):
 
         self.settings.sync()
 
-        super().closeEvent(event)
+        event.accept()
+
+        QApplication.quit()
+
+    def _apply_cycle(
+        self,
+        cycle: Cycle,
+    ) -> None:
+        self.timer.stop()
+
+        self.engine = TimerEngine(
+            cycle
+        )
+
+        self._update_ui()
+
+    def _open_cycle_editor(self) -> None:
+        self._close_preset_panel()
+
+        self.cycle_editor.load_cycle(
+            self.engine.cycle,
+            self.presets,
+        )
+
+        self.normal_view.hide()
+        self.compact_view.hide()
+
+        self.setMaximumHeight(16777215)
+        self.setMinimumSize(620, 420)
+        self.resize(620, 420)
+
+        self.cycle_editor.show()
+
+    def _save_cycle_configuration(
+        self,
+        cycle: Cycle,
+    ) -> None:
+        original_name = (
+            self.cycle_editor
+            .original_preset_name
+        )
+
+        duplicate = next(
+            (
+                preset
+                for preset in self.presets
+                if (
+                    preset.name == cycle.name
+                    and preset.name
+                    != original_name
+                )
+            ),
+            None,
+        )
+
+        if duplicate is not None:
+            QMessageBox.warning(
+                self,
+                "Nombre duplicado",
+                (
+                    "Ya existe un ciclo con "
+                    "ese nombre."
+                ),
+            )
+            return
+
+        if original_name is None:
+            self.presets.append(
+                cycle
+            )
+
+        else:
+            for index, preset in enumerate(
+                self.presets
+            ):
+                if (
+                    preset.name
+                    == original_name
+                ):
+                    self.presets[index] = (
+                        cycle
+                    )
+                    break
+
+        self.active_preset_name = (
+            cycle.name
+        )
+
+        self.cycle_storage.save_presets(
+            self.presets,
+            self.active_preset_name,
+        )
+
+        self._apply_cycle(
+            cycle
+        )
+
+        self._refresh_preset_selector()
+
+        self._close_cycle_editor()
+
+    def _replace_active_preset(
+        self,
+        cycle: Cycle,
+    ) -> None:
+
+        for preset in self.presets:
+            if (
+                preset.name == cycle.name
+                and preset.name
+                != self.active_preset_name
+            ):
+                raise ValueError(
+                    "Ya existe un ciclo con ese nombre."
+                )
+        
+        for index, preset in enumerate(
+            self.presets
+        ):
+            if (
+                preset.name
+                == self.active_preset_name
+            ):
+                self.presets[index] = cycle
+                self.active_preset_name = (
+                    cycle.name
+                )
+                return
+
+        self.presets.append(cycle)
+        self.active_preset_name = (
+            cycle.name
+        )
+
+    def _close_cycle_editor(self) -> None:
+        self.cycle_editor.hide()
+
+        if self.compact_mode:
+            self.compact_view.show()
+
+            self.setMinimumSize(360, 58)
+            self.setMaximumHeight(64)
+            self.resize(*self.COMPACT_SIZE)
+
+        else:
+            self.normal_view.show()
+
+            self.setMaximumHeight(16777215)
+            self.setMinimumSize(300, 150)
+            self.resize(*self.NORMAL_SIZE)
+
+    def _delete_preset(
+        self,
+        preset_name: str,
+    ) -> None:
+        if len(self.presets) <= 1:
+            return
+
+        self.presets = [
+            preset
+            for preset in self.presets
+            if preset.name != preset_name
+        ]
+
+        new_active_cycle = (
+            self.presets[0]
+        )
+
+        self.active_preset_name = (
+            new_active_cycle.name
+        )
+
+        self.cycle_storage.save_presets(
+            self.presets,
+            self.active_preset_name,
+        )
+
+        self._apply_cycle(
+            new_active_cycle
+        )
+
+        self._refresh_preset_selector()
+
+        self.cycle_editor.load_cycle(
+            new_active_cycle,
+            self.presets,
+        )
+
+    def _create_preset_panel(self) -> None:
+        self.preset_panel = QFrame()
+
+        self.preset_panel.setObjectName(
+            "presetPanel"
+        )
+
+        self.preset_panel_layout = QVBoxLayout(
+            self.preset_panel
+        )
+
+        self.preset_panel_layout.setContentsMargins(
+            6,
+            6,
+            6,
+            6,
+        )
+
+        self.preset_panel_layout.setSpacing(2)
+
+        self.preset_panel.hide()
+
+        self.normal_layout.addWidget(
+            self.preset_panel
+        )
+
+    def _toggle_preset_panel(self) -> None:
+        if self.preset_panel.isVisible():
+            self._close_preset_panel()
+            return
+
+        self._refresh_preset_selector()
+
+        self.preset_panel_previous_height = (
+            self.height()
+        )
+
+        self.preset_panel.show()
+
+        extra_height = (
+            self.preset_panel.height()
+        )
+
+        self.setMaximumHeight(16777215)
+
+        self.resize(
+            self.width(),
+            self.height() + extra_height,
+        )
+
+    def _select_preset(
+        self,
+        preset_name: str,
+    ) -> None:
+        self._close_preset_panel()
+
+        self._change_preset(
+            preset_name
+        )
+
+        self._refresh_preset_selector()
+
+    def _close_preset_panel(self) -> None:
+        if not self.preset_panel.isVisible():
+            return
+
+        self.preset_panel.hide()
+
+        if (
+            self.preset_panel_previous_height
+            is not None
+        ):
+            self.resize(
+                self.width(),
+                self.preset_panel_previous_height,
+            )
+
+        self.preset_panel_previous_height = None
