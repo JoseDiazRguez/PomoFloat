@@ -8,6 +8,8 @@ from pomofloat.ui.main_window import MainWindow
 def main() -> None:
     app = QApplication(sys.argv)
 
+    app.setQuitOnLastWindowClosed(True)
+
     window = MainWindow()
     window.show()
 
