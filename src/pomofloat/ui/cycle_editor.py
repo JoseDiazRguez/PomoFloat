@@ -94,7 +94,7 @@ class CycleEditor(QWidget):
         phases_label = QLabel("Fases")
         parent_layout.addWidget(phases_label)
 
-        self.phase_table = QTableWidget(0, 3)
+        self.phase_table = QTableWidget(0, 4)
 
         self.phase_table.setEditTriggers(
             QTableWidget.EditTrigger.NoEditTriggers
@@ -107,7 +107,8 @@ class CycleEditor(QWidget):
         self.phase_table.setHorizontalHeaderLabels(
             [
                 "Nombre",
-                "Duración (min)",
+                "Min",
+                "Seg",
                 "Auto iniciar siguiente",
             ]
         )
@@ -129,6 +130,11 @@ class CycleEditor(QWidget):
             QHeaderView.ResizeMode.ResizeToContents,
         )
 
+        header.setSectionResizeMode(
+            3,
+            QHeaderView.ResizeMode.ResizeToContents,
+        )
+
         self.phase_table.setSelectionBehavior(
             QTableWidget.SelectionBehavior.SelectRows
         )
@@ -142,13 +148,20 @@ class CycleEditor(QWidget):
         buttons_layout = QHBoxLayout()
 
         add_button = QPushButton("+ Añadir fase")
-        add_button.clicked.connect(self._add_phase)
-
         remove_button = QPushButton("- Eliminar fase")
+        move_up_button = QPushButton("↑ Subir")
+        move_down_button = QPushButton("↓ Bajar")
+        
+        add_button.clicked.connect(self._add_phase)
         remove_button.clicked.connect(self._remove_phase)
+        move_up_button.clicked.connect(self._move_phase_up)
+        move_down_button.clicked.connect(self._move_phase_down)
 
         buttons_layout.addWidget(add_button)
         buttons_layout.addWidget(remove_button)
+        buttons_layout.addWidget(move_up_button)
+        buttons_layout.addWidget(move_down_button)
+
         buttons_layout.addStretch()
 
         parent_layout.addLayout(buttons_layout)
@@ -194,12 +207,33 @@ class CycleEditor(QWidget):
             )
 
         name_input = QLineEdit()
-        name_input.setText(phase.name)
+        name_input.setText(
+            phase.name
+        )
 
-        duration_input = QSpinBox()
-        duration_input.setRange(1, 999)
-        duration_input.setValue(
-            phase.duration_seconds // 60
+        minutes_input = QSpinBox()
+        minutes_input.setRange(
+            0,
+            999,
+        )
+
+        seconds_input = QSpinBox()
+        seconds_input.setRange(
+            0,
+            59,
+        )
+
+        minutes, seconds = divmod(
+            phase.duration_seconds,
+            60,
+        )
+
+        minutes_input.setValue(
+            minutes
+        )
+
+        seconds_input.setValue(
+            seconds
         )
 
         auto_checkbox = QCheckBox()
@@ -208,12 +242,24 @@ class CycleEditor(QWidget):
         )
 
         auto_container = QWidget()
-        auto_layout = QHBoxLayout(auto_container)
-        auto_layout.setContentsMargins(0, 0, 0, 0)
+        auto_layout = QHBoxLayout(
+            auto_container
+        )
+
+        auto_layout.setContentsMargins(
+            0,
+            0,
+            0,
+            0,
+        )
+
         auto_layout.setAlignment(
             Qt.AlignmentFlag.AlignCenter
         )
-        auto_layout.addWidget(auto_checkbox)
+
+        auto_layout.addWidget(
+            auto_checkbox
+        )
 
         self.phase_table.setCellWidget(
             row,
@@ -224,12 +270,18 @@ class CycleEditor(QWidget):
         self.phase_table.setCellWidget(
             row,
             1,
-            duration_input,
+            minutes_input,
         )
 
         self.phase_table.setCellWidget(
             row,
             2,
+            seconds_input,
+        )
+
+        self.phase_table.setCellWidget(
+            row,
+            3,
             auto_container,
         )
 
@@ -300,37 +352,68 @@ class CycleEditor(QWidget):
                 0,
             )
 
-            duration_input = self.phase_table.cellWidget(
+            minutes_input = self.phase_table.cellWidget(
                 row,
                 1,
             )
 
-            auto_container = self.phase_table.cellWidget(
+            seconds_input = self.phase_table.cellWidget(
                 row,
                 2,
             )
 
-            if not isinstance(name_input, QLineEdit):
+            auto_container = self.phase_table.cellWidget(
+                row,
+                3,
+            )
+
+            if not isinstance(
+                name_input,
+                QLineEdit,
+            ):
                 raise ValueError(
                     "No se pudo leer el nombre de una fase."
                 )
 
-            if not isinstance(duration_input, QSpinBox):
+            if not isinstance(
+                minutes_input,
+                QSpinBox,
+            ):
                 raise ValueError(
-                    "No se pudo leer la duración de una fase."
+                    "No se pudieron leer los minutos."
                 )
 
-            phase_name = name_input.text().strip()
+            if not isinstance(
+                seconds_input,
+                QSpinBox,
+            ):
+                raise ValueError(
+                    "No se pudieron leer los segundos."
+                )
+
+            phase_name = (
+                name_input.text().strip()
+            )
 
             if not phase_name:
                 raise ValueError(
                     "Todas las fases deben tener nombre."
                 )
 
-            duration_minutes = duration_input.value()
+            duration_seconds = (
+                minutes_input.value() * 60
+                + seconds_input.value()
+            )
 
-            auto_checkbox = auto_container.findChild(
-                QCheckBox
+            if duration_seconds <= 0:
+                raise ValueError(
+                    "La duración debe ser mayor que 0 segundos."
+                )
+
+            auto_checkbox = (
+                auto_container.findChild(
+                    QCheckBox
+                )
             )
 
             if auto_checkbox is None:
@@ -341,9 +424,7 @@ class CycleEditor(QWidget):
             phases.append(
                 Phase(
                     name=phase_name,
-                    duration_seconds=(
-                        duration_minutes * 60
-                    ),
+                    duration_seconds=duration_seconds,
                     auto_start_next=(
                         auto_checkbox.isChecked()
                     ),
@@ -649,3 +730,177 @@ class CycleEditor(QWidget):
 
     def _cancel_delete_preset(self) -> None:
         self.delete_confirm_container.hide()
+
+    def _selected_phase_row(
+        self,
+    ) -> int | None:
+        indexes = (
+            self.phase_table
+            .selectionModel()
+            .selectedRows()
+        )
+
+        if not indexes:
+            return None
+
+        return indexes[0].row()
+
+    def _selected_phase_row(
+        self,
+    ) -> int | None:
+        indexes = (
+            self.phase_table
+            .selectionModel()
+            .selectedRows()
+        )
+
+        if not indexes:
+            return None
+
+        return indexes[0].row()
+
+    def _phase_from_row(
+        self,
+        row: int,
+    ) -> Phase:
+        name_input = self.phase_table.cellWidget(
+            row,
+            0,
+        )
+
+        minutes_input = self.phase_table.cellWidget(
+            row,
+            1,
+        )
+
+        seconds_input = self.phase_table.cellWidget(
+            row,
+            2,
+        )
+
+        auto_container = self.phase_table.cellWidget(
+            row,
+            3,
+        )
+
+        if not isinstance(
+            name_input,
+            QLineEdit,
+        ):
+            raise ValueError(
+                "No se pudo leer la fase."
+            )
+
+        if not isinstance(
+            minutes_input,
+            QSpinBox,
+        ):
+            raise ValueError(
+                "No se pudieron leer los minutos."
+            )
+
+        if not isinstance(
+            seconds_input,
+            QSpinBox,
+        ):
+            raise ValueError(
+                "No se pudieron leer los segundos."
+            )
+
+        auto_checkbox = (
+            auto_container.findChild(
+                QCheckBox
+            )
+        )
+
+        if auto_checkbox is None:
+            raise ValueError(
+                "No se pudo leer el auto inicio."
+            )
+
+        duration_seconds = (
+            minutes_input.value() * 60
+            + seconds_input.value()
+        )
+
+        return Phase(
+            name=name_input.text().strip(),
+            duration_seconds=duration_seconds,
+            auto_start_next=(
+                auto_checkbox.isChecked()
+            ),
+        )
+
+    def _current_phases(
+        self,
+    ) -> list[Phase]:
+        return [
+            self._phase_from_row(row)
+            for row in range(
+                self.phase_table.rowCount()
+            )
+        ]
+
+    def _set_phases(
+        self,
+        phases: list[Phase],
+    ) -> None:
+        self.phase_table.setRowCount(0)
+
+        for phase in phases:
+            self._append_phase_row(
+                phase
+            )
+
+    def _move_phase_up(self) -> None:
+        row = self._selected_phase_row()
+
+        if row is None:
+            return
+
+        if row <= 0:
+            return
+
+        phases = self._current_phases()
+
+        phases[row - 1], phases[row] = (
+            phases[row],
+            phases[row - 1],
+        )
+
+        self._set_phases(
+            phases
+        )
+
+        self.phase_table.selectRow(
+            row - 1
+        )
+
+    def _move_phase_down(self) -> None:
+        row = self._selected_phase_row()
+
+        if row is None:
+            return
+
+        last_row = (
+            self.phase_table.rowCount()
+            - 1
+        )
+
+        if row >= last_row:
+            return
+
+        phases = self._current_phases()
+
+        phases[row + 1], phases[row] = (
+            phases[row],
+            phases[row + 1],
+        )
+
+        self._set_phases(
+            phases
+        )
+
+        self.phase_table.selectRow(
+            row + 1
+        )
