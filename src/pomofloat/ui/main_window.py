@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QApplication,
     # QComboBox,
     QMessageBox,
+    QScrollArea,
 )
 
 from pomofloat.core.cycle import Cycle
@@ -64,7 +65,7 @@ class ResizeHandle(QFrame):
 
 class MainWindow(QWidget):
     NORMAL_SIZE = (360, 220)
-    COMPACT_SIZE = (380, 64)
+    COMPACT_SIZE = (440, 64)
 
     def __init__(self) -> None:
         super().__init__()
@@ -216,10 +217,11 @@ class MainWindow(QWidget):
         header_layout.setContentsMargins(0, 0, 0, 0)
         header_layout.setSpacing(6)
 
-        self.phase_indicator = QLabel("●")
+        # self.phase_indicator = QLabel("●")
 
         self.phase_label = QLabel()
         self.phase_label.setObjectName("phaseLabel")
+        self.phase_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.preset_button = QPushButton()
 
@@ -238,9 +240,9 @@ class MainWindow(QWidget):
         self.repetition_label = QLabel()
         self.repetition_label.setObjectName("secondaryLabel")
 
-        header_layout.addWidget(
-            self.phase_indicator
-        )
+        # header_layout.addWidget(
+        #    self.phase_indicator
+        # )
 
         header_layout.addWidget(
             self.preset_button
@@ -317,7 +319,9 @@ class MainWindow(QWidget):
                 "presetItemButton"
             )
 
-            button.setFixedHeight(32)
+            button.setFixedHeight(
+                32
+            )
 
             button.clicked.connect(
                 lambda checked=False,
@@ -329,21 +333,9 @@ class MainWindow(QWidget):
                 button
             )
 
-        row_height = 32
-        spacing = 2
-        margins = 12
+        self.preset_panel_layout.addStretch()
 
-        preset_count = len(self.presets)
-
-        panel_height = (
-            preset_count * row_height
-            + max(0, preset_count - 1) * spacing
-            + margins
-        )
-
-        self.preset_panel.setFixedHeight(
-            panel_height
-        )
+        self._update_preset_panel_height()
 
     def _change_preset(
         self,
@@ -394,6 +386,7 @@ class MainWindow(QWidget):
         self.state_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         timer_layout.addStretch()
+        timer_layout.addWidget(self.phase_label)
         timer_layout.addWidget(self.time_label)
         timer_layout.addWidget(self.progress_bar)
         timer_layout.addWidget(self.state_label)
@@ -453,12 +446,13 @@ class MainWindow(QWidget):
             }
 
             #phaseLabel {
-                font-size: 13px;
+                font-size: 12px;
                 font-weight: 700;
+                color: #bdc1c6;
             }
 
             #timeLabel {
-                font-size: 44px;
+                font-size: 38px;
                 font-weight: 700;
             }
 
@@ -513,12 +507,12 @@ class MainWindow(QWidget):
             }
 
             #compactPhaseLabel {
-                font-size: 12px;
+                font-size: 11px;
                 font-weight: 600;
             }
 
             #compactTimeLabel {
-                font-size: 18px;
+                font-size: 16px;
                 font-weight: 700;
             }
 
@@ -550,7 +544,7 @@ class MainWindow(QWidget):
             #presetPanel {
                 background-color: #292a2d;
                 border: 1px solid #5f6368;
-                border-radius: 6px;
+                border-radius: 8px;
             }
 
             #presetItemButton {
@@ -565,6 +559,42 @@ class MainWindow(QWidget):
 
             #presetItemButton:hover {
                 background-color: #3c4043;
+            }
+
+            QScrollArea {
+                background: transparent;
+                border: none;
+            }
+
+            QScrollArea > QWidget > QWidget {
+                background: transparent;
+            }
+
+            QScrollArea QWidget {
+                background: transparent;
+                border: none;
+            }
+
+            QScrollBar:vertical {
+                background: transparent;
+                width: 8px;
+                margin: 4px 2px 4px 2px;
+            }
+
+            QScrollBar::handle:vertical {
+                background-color: #5f6368;
+                border-radius: 4px;
+                min-height: 24px;
+            }
+
+            QScrollBar::add-line:vertical,
+            QScrollBar::sub-line:vertical {
+                height: 0px;
+            }
+
+            QScrollBar::add-page:vertical,
+            QScrollBar::sub-page:vertical {
+                background: transparent;
             }
             """
         )
@@ -628,7 +658,7 @@ class MainWindow(QWidget):
             self.normal_view.hide()
             self.compact_view.show()
 
-            self.setMinimumSize(360, 58)
+            self.setMinimumSize(420, 58)
             self.setMaximumHeight(64)
             self.resize(*self.COMPACT_SIZE)
 
@@ -653,18 +683,25 @@ class MainWindow(QWidget):
     def _update_ui(self) -> None:
         phase = self.engine.current_phase
 
-        self.phase_label.setText(
-            phase.name.upper()
-            if not self.compact_mode
-            else phase.name
+        self.phase_label.setText(phase.name.upper())
+
+        total_seconds = self.engine.remaining_seconds
+
+        hours, remainder = divmod(
+            total_seconds,
+            3600,
         )
 
         minutes, seconds = divmod(
-            self.engine.remaining_seconds,
+            remainder,
             60,
         )
 
-        formatted_time = f"{minutes:02d}:{seconds:02d}"
+        formatted_time = (
+            f"{hours:02d}:"
+            f"{minutes:02d}:"
+            f"{seconds:02d}"
+        )
 
         self.time_label.setText(formatted_time)
 
@@ -678,7 +715,13 @@ class MainWindow(QWidget):
 
         self.repetition_label.setText(repetition_text)
 
-        self.compact_phase_label.setText(phase.name)
+        self.compact_phase_label.setText(
+            self._elide_text(
+                self.compact_phase_label,
+                phase.name,
+                130,
+            )
+        )
         self.compact_time_label.setText(formatted_time)
         self.compact_repetition_label.setText(repetition_text)
 
@@ -751,15 +794,38 @@ class MainWindow(QWidget):
         layout.setContentsMargins(10, 5, 6, 5)
         layout.setSpacing(8)
 
-        self.compact_indicator = QLabel("●")
+        # self.compact_indicator = QLabel("●")
 
         self.compact_phase_label = QLabel()
+        self.compact_phase_label.setMinimumWidth(
+            100
+        )
+
+        self.compact_phase_label.setMaximumWidth(
+            130
+        )
         self.compact_phase_label.setObjectName("compactPhaseLabel")
 
         self.compact_time_label = QLabel()
+        self.compact_time_label.setMinimumWidth(
+            90
+        )
+
+        self.compact_time_label.setAlignment(
+            Qt.AlignmentFlag.AlignCenter
+        )
         self.compact_time_label.setObjectName("compactTimeLabel")
 
         self.compact_repetition_label = QLabel()
+        self.compact_repetition_label.setMinimumWidth(
+            34
+        )
+        self.compact_repetition_label.setMaximumWidth(
+            150
+        )
+        self.compact_repetition_label.setAlignment(
+            Qt.AlignmentFlag.AlignCenter
+        )
         self.compact_repetition_label.setObjectName("secondaryLabel")
 
         self.compact_start_button = QPushButton("▶")
@@ -789,13 +855,21 @@ class MainWindow(QWidget):
         self.compact_close_button.setObjectName("closeButton")
         self.compact_close_button.clicked.connect(self.close)
 
-        layout.addWidget(self.compact_indicator)
+        # layout.addWidget(self.compact_indicator)
         layout.addWidget(self.compact_phase_label)
 
         layout.addStretch()
 
-        layout.addWidget(self.compact_time_label)
-        layout.addWidget(self.compact_repetition_label)
+        center_layout = QHBoxLayout()
+        center_layout.setSpacing(8)
+
+        center_layout.addWidget(self.compact_time_label)
+        center_layout.addWidget(self.compact_repetition_label)
+
+        layout.addLayout(center_layout)
+
+        layout.addStretch()
+
         layout.addWidget(self.compact_start_button)
         layout.addWidget(self.compact_settings_button)
         layout.addWidget(self.expand_button)
@@ -1038,23 +1112,65 @@ class MainWindow(QWidget):
 
     def _create_preset_panel(self) -> None:
         self.preset_panel = QFrame()
-
         self.preset_panel.setObjectName(
             "presetPanel"
         )
 
-        self.preset_panel_layout = QVBoxLayout(
+        panel_layout = QVBoxLayout(
             self.preset_panel
         )
 
-        self.preset_panel_layout.setContentsMargins(
-            6,
-            6,
-            6,
+        panel_layout.setContentsMargins(
+            4,
+            2,
+            4,
             6,
         )
 
-        self.preset_panel_layout.setSpacing(2)
+        self.preset_scroll = QScrollArea()
+
+        self.preset_scroll.setWidgetResizable(
+            True
+        )
+
+        self.preset_scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+
+        self.preset_scroll.setVerticalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded
+        )
+
+        self.preset_scroll.setFrameShape(
+            QFrame.Shape.NoFrame
+        )
+
+        self.preset_list_container = QWidget()
+
+        self.preset_panel_layout = QVBoxLayout(
+            self.preset_list_container
+        )
+
+        self.preset_panel_layout.setContentsMargins(
+            8,
+            6,
+            8,
+            6,
+        )
+
+        self.preset_panel_layout.setSpacing(
+            2
+        )
+
+        self.preset_panel_layout.addStretch()
+
+        self.preset_scroll.setWidget(
+            self.preset_list_container
+        )
+
+        panel_layout.addWidget(
+            self.preset_scroll
+        )
 
         self.preset_panel.hide()
 
@@ -1077,6 +1193,8 @@ class MainWindow(QWidget):
 
         extra_height = (
             self.preset_panel.height()
+            + self.normal_layout.spacing()
+            + 12
         )
 
         self.setMaximumHeight(16777215)
@@ -1114,3 +1232,44 @@ class MainWindow(QWidget):
             )
 
         self.preset_panel_previous_height = None
+
+    def _update_preset_panel_height(
+        self,
+    ) -> None:
+        row_height = 32
+        spacing = 2
+        margins = 12
+
+        preset_count = len(
+            self.presets
+        )
+
+        visible_rows = min(
+            preset_count,
+            5,
+        )
+
+        panel_height = (
+            visible_rows * row_height
+            + max(
+                0,
+                visible_rows - 1,
+            ) * spacing
+            + margins
+        )
+
+        self.preset_panel.setFixedHeight(
+            panel_height
+        )
+
+    def _elide_text(
+        self,
+        label: QLabel,
+        text: str,
+        width: int,
+    ) -> str:
+        return label.fontMetrics().elidedText(
+            text,
+            Qt.TextElideMode.ElideRight,
+            width,
+        )
