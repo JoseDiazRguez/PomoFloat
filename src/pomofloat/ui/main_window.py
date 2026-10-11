@@ -156,6 +156,10 @@ class MainWindow(QWidget):
         self._restore_window_state()
         self._apply_app_settings(self.app_settings)
 
+        QApplication.styleHints().colorSchemeChanged.connect(
+            self._system_color_scheme_changed
+        )
+
     def _configure_window(self) -> None:
         self.setWindowTitle("PomoFloat")
         self.setObjectName("mainWindow")
@@ -651,6 +655,41 @@ class MainWindow(QWidget):
             QScrollBar::sub-page:vertical {{
                 background: transparent;
             }}
+            """
+        )
+
+        self.settings_view.theme_selector.setStyleSheet(
+            """
+            QComboBox {
+                background-color: #303134;
+                color: #f1f3f4;
+                border: 1px solid #5f6368;
+                border-radius: 4px;
+                padding: 4px 8px;
+                min-height: 22px;
+            }
+
+            QComboBox:hover {
+                background-color: #3c4043;
+            }
+
+            QComboBox::drop-down {
+                border: none;
+                width: 20px;
+            }
+            """
+        )
+
+        self.settings_view.theme_selector.view().setStyleSheet(
+            """
+            QAbstractItemView {
+                background-color: #292a2d;
+                color: #f1f3f4;
+                border: none;
+                selection-background-color: #3c4043;
+                selection-color: #ffffff;
+                outline: none;
+            }
             """
         )
 
@@ -1392,6 +1431,23 @@ class MainWindow(QWidget):
             settings
         )
 
+    def _system_color_scheme_changed(
+        self,
+        _scheme: Qt.ColorScheme,
+    ) -> None:
+        if self.settings_view.isVisible():
+            settings = (
+                self.settings_view
+                .build_settings()
+            )
+        else:
+            settings = self.app_settings
+
+        if settings.theme == "system":
+            self._apply_app_settings(
+                settings
+            )
+
     def _apply_app_settings(
         self,
         settings: AppSettings,
@@ -1406,10 +1462,32 @@ class MainWindow(QWidget):
         theme: str,
         opacity: int = 100,
     ) -> None:
-        if theme != "light":
+        effective_theme = theme
+
+        if theme == "system":
+            color_scheme = (
+                QApplication
+                .styleHints()
+                .colorScheme()
+            )
+
+            if color_scheme == Qt.ColorScheme.Light:
+                effective_theme = "light"
+            else:
+                effective_theme = "dark"
+
+        if effective_theme == "dark":
             self._apply_styles(opacity)
             return
 
+        if effective_theme == "light":
+            self._apply_light_styles(opacity)
+            return
+
+    def _apply_light_styles(
+        self,
+        opacity: int = 100,
+    ) -> None:
         alpha = round(
             255 * opacity / 100
         )
@@ -1417,12 +1495,16 @@ class MainWindow(QWidget):
         self.setStyleSheet(
             f"""
             #mainWindow {{
+                background: transparent;
+            }}
+
+            #appBackground {{
                 background-color: rgba(
-                    245, 
-                    245, 
-                    245, 
+                    245,
+                    245,
+                    245,
                     {alpha}
-                ); 
+                );
                 color: #202124;
                 font-family: Arial;
             }}
@@ -1590,6 +1672,41 @@ class MainWindow(QWidget):
             """
         )
 
+        self.settings_view.theme_selector.setStyleSheet(
+            """
+            QComboBox {
+                background-color: #ffffff;
+                color: #202124;
+                border: 1px solid #c7c7c7;
+                border-radius: 4px;
+                padding: 4px 8px;
+                min-height: 22px;
+            }
+
+            QComboBox:hover {
+                background-color: #eeeeee;
+            }
+
+            QComboBox::drop-down {
+                border: none;
+                width: 20px;
+            }
+            """
+        )
+
+        self.settings_view.theme_selector.view().setStyleSheet(
+            """
+            QAbstractItemView {
+                background-color: #ffffff;
+                color: #202124;
+                border: none;
+                selection-background-color: #e8f0fe;
+                selection-color: #202124;
+                outline: none;
+            }
+            """
+        )
+
     def _save_app_settings(
         self,
         settings: AppSettings,
@@ -1602,26 +1719,31 @@ class MainWindow(QWidget):
 
         self.settings_before_edit = None
 
+        self._close_app_settings()
+
         self._apply_app_settings(
             settings
         )
 
-        self._close_app_settings()
-
     def _cancel_app_settings(self) -> None:
-        if (
+        previous_settings = (
             self.settings_before_edit
-            is not None
-        ):
-            self._apply_app_settings(
-                self.settings_before_edit
-            )
+        )
 
         self.settings_before_edit = None
 
         self._close_app_settings()
 
+        if previous_settings is not None:
+            self._apply_app_settings(
+                previous_settings
+            )
+
     def _close_app_settings(self) -> None:
+        self.settings_view.close_theme_popup()
+
+        QApplication.processEvents()
+
         self.settings_view.hide()
 
         if self.compact_mode:
