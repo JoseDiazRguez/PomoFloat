@@ -10,7 +10,6 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
     QApplication,
-    # QComboBox,
     QMessageBox,
     QScrollArea,
 )
@@ -22,6 +21,9 @@ from pomofloat.ui.cycle_editor import CycleEditor
 from pomofloat.services.cycle_storage import (
     CycleStorage,
 )
+from pomofloat.core.app_settings import AppSettings
+from pomofloat.services.settings_storage import SettingsStorage
+from pomofloat.ui.settings_view import SettingsView
 
 
 class DraggableFrame(QFrame):
@@ -75,6 +77,16 @@ class MainWindow(QWidget):
         self.compact_mode = False
 
         self.cycle_storage = CycleStorage()
+
+        self.settings_storage = SettingsStorage()
+
+        self.app_settings = (
+            self.settings_storage.load()
+        )
+
+        self.settings_before_edit: (
+            AppSettings | None
+        ) = None
 
         self.presets, active_preset_name = (
             self.cycle_storage.load_presets()
@@ -138,12 +150,20 @@ class MainWindow(QWidget):
 
         self._configure_window()
         self._create_ui()
+
         self._refresh_preset_selector()
         self._update_ui()
         self._restore_window_state()
+        self._apply_app_settings(self.app_settings)
 
     def _configure_window(self) -> None:
         self.setWindowTitle("PomoFloat")
+        self.setObjectName("mainWindow")
+
+        self.setAttribute(
+            Qt.WidgetAttribute.WA_TranslucentBackground,
+            True,
+        )
 
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint
@@ -155,13 +175,26 @@ class MainWindow(QWidget):
         self.resize(*self.NORMAL_SIZE)
 
     def _create_ui(self) -> None:
-        self.main_layout = QVBoxLayout(self)
-        self.main_layout.setContentsMargins(14, 10, 10, 8)
+        outer_layout = QVBoxLayout(self)
+        outer_layout.setContentsMargins(0,0,0,0,)
+
+        self.background_frame = QFrame(self)
+        self.background_frame.setObjectName("appBackground")
+        self.background_frame.setAttribute(
+            Qt.WidgetAttribute.WA_StyledBackground,
+            True,
+        )
+
+        outer_layout.addWidget(self.background_frame)
+
+        self.main_layout = QVBoxLayout(self.background_frame)
+        self.main_layout.setContentsMargins(14,10,10,8,)
         self.main_layout.setSpacing(8)
 
         self._create_normal_view()
         self._create_compact_view()
         self._create_cycle_editor_view()
+        self._create_settings_view()
 
         self._apply_styles()
 
@@ -252,16 +285,15 @@ class MainWindow(QWidget):
 
         header_layout.addWidget(self.repetition_label)
 
-        self.settings_button = QPushButton("⚙")
-        self.settings_button.setObjectName(
-            "windowButton"
-        )
-        self.settings_button.setToolTip(
-            "Configurar ciclo"
-        )
-        self.settings_button.clicked.connect(
-            self._open_cycle_editor
-        )
+        self.cycle_settings_button = QPushButton("✎")
+        self.cycle_settings_button.setObjectName("windowButton")
+        self.cycle_settings_button.setToolTip("Configurar ciclo")
+        self.cycle_settings_button.clicked.connect(self._open_cycle_editor)
+
+        self.app_settings_button = QPushButton("⚙")
+        self.app_settings_button.setObjectName("windowButton")
+        self.app_settings_button.setToolTip("Ajustes de PomoFloat")
+        self.app_settings_button.clicked.connect(self._open_app_settings)
 
         self.compact_button = QPushButton("▭")
         self.compact_button.setObjectName("windowButton")
@@ -275,7 +307,8 @@ class MainWindow(QWidget):
         self.close_button.setToolTip("Cerrar PomoFloat")
         self.close_button.clicked.connect(self.close)
 
-        header_layout.addWidget(self.settings_button)
+        header_layout.addWidget(self.cycle_settings_button)
+        header_layout.addWidget(self.app_settings_button)
         header_layout.addWidget(self.compact_button)
         header_layout.addWidget(self.close_button)
 
@@ -436,118 +469,140 @@ class MainWindow(QWidget):
 
         self.main_layout.addLayout(resize_layout)
 
-    def _apply_styles(self) -> None:
+    def _apply_styles(
+        self,
+        opacity: int = 100,
+    ) -> None:
+        alpha = round(
+            255 * opacity / 100
+        )
+
         self.setStyleSheet(
-            """
-            QWidget {
-                background-color: #202124;
+            f"""
+            #mainWindow {{
+                background: transparent;
+            }}
+
+            #appBackground {{
+                background-color: rgba(
+                    32,
+                    33,
+                    36,
+                    {alpha}
+                );
                 color: #f1f3f4;
                 font-family: Arial;
-            }
+            }}
 
-            #phaseLabel {
+            QWidget {{
+                background: transparent;
+                color: #f1f3f4;
+                font-family: Arial;
+            }}
+
+            #phaseLabel {{
                 font-size: 12px;
                 font-weight: 700;
                 color: #bdc1c6;
-            }
+            }}
 
-            #timeLabel {
+            #timeLabel {{
                 font-size: 38px;
                 font-weight: 700;
-            }
+            }}
 
-            #secondaryLabel {
+            #secondaryLabel {{
                 color: #9aa0a6;
                 font-size: 11px;
-            }
+            }}
 
-            QPushButton {
+            QPushButton {{
                 background-color: #303134;
                 border: 1px solid #5f6368;
                 border-radius: 8px;
                 min-width: 38px;
                 min-height: 30px;
                 font-size: 16px;
-            }
+            }}
 
-            QPushButton:hover {
+            QPushButton:hover {{
                 background-color: #3c4043;
-            }
+            }}
 
-            QPushButton:pressed {
+            QPushButton:pressed {{
                 background-color: #4a4d51;
-            }
+            }}
 
             #windowButton,
-            #closeButton {
+            #closeButton {{
                 background: transparent;
                 border: none;
                 min-width: 24px;
                 min-height: 24px;
                 font-size: 16px;
-            }
+            }}
 
-            #windowButton:hover {
+            #windowButton:hover {{
                 background-color: #303134;
-            }
+            }}
 
-            #closeButton:hover {
+            #closeButton:hover {{
                 background-color: #5f2120;
-            }
+            }}
 
-            QProgressBar {
+            QProgressBar {{
                 border: none;
                 border-radius: 3px;
                 background-color: #303134;
-            }
+            }}
 
-            QProgressBar::chunk {
+            QProgressBar::chunk {{
                 border-radius: 3px;
                 background-color: #8ab4f8;
-            }
+            }}
 
-            #compactPhaseLabel {
+            #compactPhaseLabel {{
                 font-size: 11px;
                 font-weight: 600;
-            }
+            }}
 
-            #compactTimeLabel {
+            #compactTimeLabel {{
                 font-size: 16px;
                 font-weight: 700;
-            }
+            }}
 
-            #compactButton {
+            #compactButton {{
                 background: transparent;
                 border: none;
                 min-width: 26px;
                 min-height: 26px;
                 font-size: 15px;
-            }
+            }}
 
-            #compactButton:hover {
+            #compactButton:hover {{
                 background-color: #303134;
-            }
+            }}
 
-            #presetButton {
+            #presetButton {{
                 background-color: #303134;
                 border: 1px solid #5f6368;
                 border-radius: 4px;
                 padding: 3px 8px;
                 font-size: 11px;
                 min-height: 20px;
-            }
+            }}
 
-            #presetButton:hover {
+            #presetButton:hover {{
                 background-color: #3c4043;
-            }
+            }}
 
-            #presetPanel {
+            #presetPanel {{
                 background-color: #292a2d;
                 border: 1px solid #5f6368;
                 border-radius: 8px;
-            }
+            }}
 
-            #presetItemButton {
+            #presetItemButton {{
                 background: transparent;
                 border: none;
                 border-radius: 4px;
@@ -555,47 +610,47 @@ class MainWindow(QWidget):
                 padding-left: 10px;
                 padding-right: 10px;
                 font-size: 12px;
-            }
+            }}
 
-            #presetItemButton:hover {
+            #presetItemButton:hover {{
                 background-color: #3c4043;
-            }
+            }}
 
-            QScrollArea {
+            QScrollArea {{
                 background: transparent;
                 border: none;
-            }
+            }}
 
-            QScrollArea > QWidget > QWidget {
+            QScrollArea > QWidget > QWidget {{
                 background: transparent;
-            }
+            }}
 
-            QScrollArea QWidget {
+            QScrollArea QWidget {{
                 background: transparent;
                 border: none;
-            }
+            }}
 
-            QScrollBar:vertical {
+            QScrollBar:vertical {{
                 background: transparent;
                 width: 8px;
                 margin: 4px 2px 4px 2px;
-            }
+            }}
 
-            QScrollBar::handle:vertical {
+            QScrollBar::handle:vertical {{
                 background-color: #5f6368;
                 border-radius: 4px;
                 min-height: 24px;
-            }
+            }}
 
             QScrollBar::add-line:vertical,
-            QScrollBar::sub-line:vertical {
+            QScrollBar::sub-line:vertical {{
                 height: 0px;
-            }
+            }}
 
             QScrollBar::add-page:vertical,
-            QScrollBar::sub-page:vertical {
+            QScrollBar::sub-page:vertical {{
                 background: transparent;
-            }
+            }}
             """
         )
 
@@ -1273,3 +1328,330 @@ class MainWindow(QWidget):
             Qt.TextElideMode.ElideRight,
             width,
         )
+
+    def _create_settings_view(self) -> None:
+        self.settings_view = SettingsView(
+            self.app_settings,
+            self,
+        )
+
+        self.settings_view.saved.connect(
+            self._save_app_settings
+        )
+
+        self.settings_view.cancelled.connect(
+            self._cancel_app_settings
+        )
+
+        self.settings_view.preview_changed.connect(
+            self._preview_app_settings
+        )
+
+        self.settings_view.hide()
+
+        self.main_layout.addWidget(
+            self.settings_view
+        )
+
+    def _open_app_settings(self) -> None:
+        self._close_preset_panel()
+
+        self.settings_before_edit = (
+            self.app_settings
+        )
+
+        self.settings_view.load_settings(
+            self.app_settings
+        )
+
+        self.normal_view.hide()
+        self.compact_view.hide()
+        self.cycle_editor.hide()
+
+        self.setMaximumHeight(
+            16777215
+        )
+
+        self.setMinimumSize(
+            500,
+            430,
+        )
+
+        self.resize(
+            500,
+            430,
+        )
+
+        self.settings_view.show()
+
+    def _preview_app_settings(
+        self,
+        settings: AppSettings,
+    ) -> None:
+        self._apply_app_settings(
+            settings
+        )
+
+    def _apply_app_settings(
+        self,
+        settings: AppSettings,
+    ) -> None:
+        self._apply_theme(
+            settings.theme,
+            settings.window_opacity,
+        )
+
+    def _apply_theme(
+        self,
+        theme: str,
+        opacity: int = 100,
+    ) -> None:
+        if theme != "light":
+            self._apply_styles(opacity)
+            return
+
+        alpha = round(
+            255 * opacity / 100
+        )
+
+        self.setStyleSheet(
+            f"""
+            #mainWindow {{
+                background-color: rgba(
+                    245, 
+                    245, 
+                    245, 
+                    {alpha}
+                ); 
+                color: #202124;
+                font-family: Arial;
+            }}
+
+            QWidget {{
+                background: transparent;
+                color: #202124;
+                font-family: Arial;
+            }}
+
+            #phaseLabel {{
+                font-size: 12px;
+                font-weight: 700;
+                color: #5f6368;
+            }}
+
+            #timeLabel {{
+                font-size: 38px;
+                font-weight: 700;
+                color: #202124;
+            }}
+
+            #secondaryLabel {{
+                color: #5f6368;
+                font-size: 11px;
+            }}
+
+            QPushButton {{
+                background-color: #ffffff;
+                color: #202124;
+                border: 1px solid #c7c7c7;
+                border-radius: 8px;
+                min-width: 38px;
+                min-height: 30px;
+                font-size: 16px;
+            }}
+
+            QPushButton:hover {{
+                background-color: #eeeeee;
+            }}
+
+            QPushButton:pressed {{
+                background-color: #e0e0e0;
+            }}
+
+            #windowButton,
+            #closeButton {{
+                background: transparent;
+                border: none;
+                min-width: 24px;
+                min-height: 24px;
+                font-size: 16px;
+            }}
+
+            #windowButton:hover {{
+                background-color: #e8e8e8;
+            }}
+
+            #closeButton:hover {{
+                background-color: #f4c7c3;
+            }}
+
+            QProgressBar {{
+                border: none;
+                border-radius: 3px;
+                background-color: #dadce0;
+            }}
+
+            QProgressBar::chunk {{
+                border-radius: 3px;
+                background-color: #1a73e8;
+            }}
+
+            #compactPhaseLabel {{
+                font-size: 11px;
+                font-weight: 600;
+            }}
+
+            #compactTimeLabel {{
+                font-size: 16px;
+                font-weight: 700;
+            }}
+
+            #compactButton {{
+                background: transparent;
+                border: none;
+                min-width: 26px;
+                min-height: 26px;
+                font-size: 15px;
+            }}
+
+            #compactButton:hover {{
+                background-color: #e8e8e8;
+            }}
+
+            #presetButton {{
+                background-color: #ffffff;
+                color: #202124;
+                border: 1px solid #c7c7c7;
+                border-radius: 4px;
+                padding: 3px 8px;
+                font-size: 11px;
+                min-height: 20px;
+            }}
+
+            #presetButton:hover {{
+                background-color: #eeeeee;
+            }}
+
+            #presetPanel {{
+                background-color: #ffffff;
+                border: 1px solid #c7c7c7;
+                border-radius: 8px;
+            }}
+
+            #presetItemButton {{
+                background: transparent;
+                border: none;
+                border-radius: 4px;
+                text-align: left;
+                padding-left: 10px;
+                padding-right: 10px;
+                font-size: 12px;
+            }}
+
+            #presetItemButton:hover {{
+                background-color: #eeeeee;
+            }}
+
+            QScrollArea {{
+                background: transparent;
+                border: none;
+            }}
+
+            QScrollArea > QWidget > QWidget {{
+                background: transparent;
+            }}
+
+            QScrollArea QWidget {{
+                background: transparent;
+                border: none;
+            }}
+
+            QScrollBar:vertical {{
+                background: transparent;
+                width: 8px;
+                margin: 4px 2px 4px 2px;
+            }}
+
+            QScrollBar::handle:vertical {{
+                background-color: #b0b0b0;
+                border-radius: 4px;
+                min-height: 24px;
+            }}
+
+            QScrollBar::add-line:vertical,
+            QScrollBar::sub-line:vertical {{
+                height: 0px;
+            }}
+
+            QScrollBar::add-page:vertical,
+            QScrollBar::sub-page:vertical {{
+                background: transparent;
+            }}
+            """
+        )
+
+    def _save_app_settings(
+        self,
+        settings: AppSettings,
+    ) -> None:
+        self.app_settings = settings
+
+        self.settings_storage.save(
+            settings
+        )
+
+        self.settings_before_edit = None
+
+        self._apply_app_settings(
+            settings
+        )
+
+        self._close_app_settings()
+
+    def _cancel_app_settings(self) -> None:
+        if (
+            self.settings_before_edit
+            is not None
+        ):
+            self._apply_app_settings(
+                self.settings_before_edit
+            )
+
+        self.settings_before_edit = None
+
+        self._close_app_settings()
+
+    def _close_app_settings(self) -> None:
+        self.settings_view.hide()
+
+        if self.compact_mode:
+            self.compact_view.show()
+
+            self.setMinimumSize(
+                420,
+                58,
+            )
+
+            self.setMaximumHeight(
+                64
+            )
+
+            self.resize(
+                *self.COMPACT_SIZE
+            )
+
+        else:
+            self.normal_view.show()
+
+            self.setMaximumHeight(
+                16777215
+            )
+
+            self.setMinimumSize(
+                300,
+                150,
+            )
+
+            self.resize(
+                *self.NORMAL_SIZE
+            )
