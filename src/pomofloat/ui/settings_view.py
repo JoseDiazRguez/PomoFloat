@@ -1,7 +1,8 @@
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QTimer
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -87,6 +88,31 @@ class SettingsView(QWidget):
         theme_label = QLabel("Tema")
 
         self.theme_selector = QComboBox()
+
+        self.theme_selector.view().setFrameShape(
+            QFrame.Shape.NoFrame
+        )
+
+        self.theme_selector.setObjectName(
+            "themeSelector"
+        )
+
+        self.theme_selector.view().setObjectName(
+            "themeSelectorView"
+        )
+
+        popup = self.theme_selector.view().window()
+
+        popup.setStyleSheet(
+            """
+            QFrame {
+                border: none;
+                margin: 0px;
+                padding: 0px;
+            }
+            """
+        )
+
         self.theme_selector.addItem(
             "Sistema",
             "system",
@@ -100,9 +126,9 @@ class SettingsView(QWidget):
             "light",
         )
 
-        self.theme_selector.currentIndexChanged.connect(
-            self._emit_preview
-        )
+        self.theme_selector.activated.connect(
+            self._theme_changed
+        )   
 
         theme_layout.addWidget(
             theme_label
@@ -316,7 +342,7 @@ class SettingsView(QWidget):
         )
 
         cancel_button.clicked.connect(
-            self.cancelled.emit
+            self._cancel
         )
 
         save_button.clicked.connect(
@@ -398,13 +424,41 @@ class SettingsView(QWidget):
             ),
         )
 
+    def _cancel(self) -> None:
+        self.close_theme_popup()
+        self.cancelled.emit()
+
+    def close_theme_popup(self) -> None:
+        self.theme_selector.hidePopup()
+        self.theme_selector.clearFocus()
+
+        popup = self.theme_selector.view().window()
+
+        if popup is not None:
+            popup.hide()
+            popup.close()
+
     def _save(self) -> None:
+        self.close_theme_popup()
+
         settings = self.build_settings()
 
         self.settings = settings
 
         self.saved.emit(
             settings
+        )
+
+    def _theme_changed(
+        self,
+        _index: int,
+    ) -> None:
+        self.theme_selector.hidePopup()
+        self.theme_selector.clearFocus()
+
+        QTimer.singleShot(
+            0,
+            self._emit_preview,
         )
 
     def _emit_preview(self) -> None:
