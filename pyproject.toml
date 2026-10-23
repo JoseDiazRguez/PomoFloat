@@ -14,7 +14,9 @@ authors = [
     { name = "José Díaz Rodríguez" }
 ]
 
-dependencies = []
+dependencies = [
+	"PySide6>=6.8,<7"
+]
 
 [project.scripts]
 pomofloat = "pomofloat.main:main"   # Nos permitir ejecutarlo solo con pomofloat

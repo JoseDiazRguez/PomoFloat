@@ -6,6 +6,7 @@ __pycache__/
 
 # Virtual environments
 .venv/
+.venv-win/
 venv/
 env/
 
@@ -16,28 +17,7 @@ dist/
 
 # PyInstaller
 *.spec
-
-# IDE
-.vscode/
-.idea/
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-
-# Virtual environments
-.venv/
-venv/
-env/
-
-# Build
-build/
-dist/
-*.egg-info/
-
-# PyInstaller
-*.spec
+!PomoFloat.spec
 
 # IDE
 .vscode/
