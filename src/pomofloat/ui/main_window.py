@@ -1,5 +1,9 @@
 from PySide6.QtCore import QSettings, Qt, QTimer
-from PySide6.QtGui import QCloseEvent, QMouseEvent
+from PySide6.QtGui import (
+    QCloseEvent,
+    QMouseEvent,
+    QShowEvent,
+)
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -24,6 +28,10 @@ from pomofloat.services.cycle_storage import (
 from pomofloat.core.app_settings import AppSettings
 from pomofloat.services.settings_storage import SettingsStorage
 from pomofloat.ui.settings_view import SettingsView
+
+from pomofloat.services.window_behavior import (
+    enforce_always_on_top,
+)
 
 
 class DraggableFrame(QFrame):
@@ -1777,3 +1785,13 @@ class MainWindow(QWidget):
             self.resize(
                 *self.NORMAL_SIZE
             )
+
+    def showEvent(
+        self,
+        event: QShowEvent,
+    ) -> None:
+        super().showEvent(event)
+
+        enforce_always_on_top(
+            self
+        )                                  
