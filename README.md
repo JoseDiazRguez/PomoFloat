@@ -46,27 +46,39 @@ PomoFloat-0.1.0-Setup.exe
 
 ## Capturas de pantalla
 
-> Esta sección puede completarse añadiendo imágenes del modo normal, modo compacto y configuración de ciclos.
+### Temporizador principal
 
-Ejemplo de estructura recomendada:
+Vista principal de PomoFloat con el preset seleccionado, fase actual, temporizador y controles de reproducción.
 
-```text
-assets/
-└── screenshots/
-    ├── normal-mode.png
-    ├── compact-mode.png
-    └── cycle-editor.png
-```
+<p align="center">
+  <img src="assets/screenshots/main-window.png" alt="Ventana principal de PomoFloat" width="420">
+</p>
 
-Después pueden mostrarse en el README así:
+### Editor de ciclos
 
-```markdown
-![Modo normal](assets/screenshots/normal-mode.png)
+Los ciclos pueden personalizarse definiendo el nombre, número de repeticiones, fases, duración en minutos y segundos y el inicio automático de la siguiente fase.
 
-![Modo compacto](assets/screenshots/compact-mode.png)
+También es posible añadir, eliminar y reordenar las fases.
 
-![Editor de ciclos](assets/screenshots/cycle-editor.png)
-```
+<p align="center">
+  <img src="assets/screenshots/cycle-editor.png" alt="Editor de ciclos de PomoFloat" width="720">
+</p>
+
+### Ajustes de la aplicación
+
+PomoFloat dispone de una sección de preferencias generales para configurar aspectos como el tema, la opacidad, el sonido, el volumen, las notificaciones y otros comportamientos de la aplicación.
+
+<p align="center">
+  <img src="assets/screenshots/settings.png" alt="Ajustes de PomoFloat" width="600">
+</p>
+
+### Modo compacto
+
+El modo compacto reduce PomoFloat a una pequeña barra flotante manteniendo visible la fase actual, el tiempo restante, la repetición y los principales controles.
+
+<p align="center">
+  <img src="assets/screenshots/compact-mode.png" alt="Modo compacto de PomoFloat" width="600">
+</p>
 
 ---
 
@@ -310,8 +322,6 @@ Ejecutar:
 pomofloat
 ```
 
----
-
 ### Windows
 
 Crear un entorno virtual:
@@ -347,13 +357,7 @@ PomoFloat puede desarrollarse desde WSL utilizando WSLg.
 
 Sin embargo, determinadas funcionalidades relacionadas directamente con el sistema de ventanas deben validarse de forma nativa en Windows.
 
-Por ejemplo:
-
-```text
-Always-on-top
-```
-
-En Windows se utiliza además la API nativa mediante:
+Por ejemplo, el comportamiento `always-on-top` utiliza además la API nativa de Windows mediante:
 
 ```text
 HWND_TOPMOST
@@ -491,8 +495,6 @@ Ejemplos:
 
 Correcciones de errores y cambios menores compatibles.
 
-Ejemplo:
-
 ```text
 0.1.0 → 0.1.1
 ```
@@ -501,8 +503,6 @@ Ejemplo:
 
 Nuevas funcionalidades compatibles.
 
-Ejemplo:
-
 ```text
 0.1.0 → 0.2.0
 ```
@@ -510,8 +510,6 @@ Ejemplo:
 ### MAJOR
 
 Cambios importantes o incompatibles.
-
-Ejemplo:
 
 ```text
 0.9.0 → 1.0.0
@@ -605,10 +603,9 @@ Ejemplos:
 feat: add Windows packaging
 fix: correct timer transition behavior
 test: add cycle storage tests
+docs: update README with screenshots
 chore: update project configuration
 ```
-
-Prefijos habituales:
 
 | Prefijo | Uso |
 |---|---|
